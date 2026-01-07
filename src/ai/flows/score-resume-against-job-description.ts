@@ -1,74 +1,180 @@
 'use server';
 
 /**
- * @fileOverview Compares a resume against a job description, providing a match score and identifying missing skills.
- *
- * - scoreResumeAgainstJobDescription - A function that handles the resume scoring process.
- * - ScoreResumeAgainstJobDescriptionInput - The input type for the scoreResumeAgainstJobDescription function.
- * - ScoreResumeAgainstJobDescriptionOutput - The return type for the scoreResumeAgainstJobDescription function.
+ * ATS-style resume scoring using extended skill taxonomy
+ * (Works for ANY job type)
  */
+export async function scoreResumeAgainstJobDescription({
+  resumeText,
+  jobDescription,
+}: {
+  resumeText: string;
+  jobDescription: string;
+}): Promise<{
+  matchScore: number;
+  strengths: string;
+  missingSkills: string;
+}> {
+  const resume = normalize(resumeText);
+const job = normalize(jobDescription);
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
 
-const ScoreResumeAgainstJobDescriptionInputSchema = z.object({
-  resumeText: z
-    .string()
-    .describe('The extracted text from the resume.'),
-  jobDescription: z.string().describe('The job description to compare the resume against.'),
-});
-export type ScoreResumeAgainstJobDescriptionInput = z.infer<
-  typeof ScoreResumeAgainstJobDescriptionInputSchema
->;
+  /* =========================
+     UNIVERSAL SKILL BANK
+  ========================= */
 
-const ScoreResumeAgainstJobDescriptionOutputSchema = z.object({
-  matchScore: z
-    .number()
-    .describe('A score between 0 and 100 representing the match between the resume and the job description.'),
-  missingSkills: z
-    .string()
-    .describe('A comma-separated list of skills missing from the resume that are present in the job description.'),
-  strengths: z
-    .string()
-    .describe('A comma-separated list of strengths from the resume that align with the job description.'),
-});
-export type ScoreResumeAgainstJobDescriptionOutput = z.infer<
-  typeof ScoreResumeAgainstJobDescriptionOutputSchema
->;
+  const skillGroups: Record<string, string[]> = {
+    // 💻 Tech / Software
+    tech: [
+      'html',
+      'css',
+      'javascript',
+      'typescript',
+      'react',
+      'next.js',
+      'node',
+      'express',
+      'python',
+      'java',
+      'php',
+      'api',
+      'rest',
+      'graphql',
+      'sql',
+      'mongodb',
+      'firebase',
+      'aws',
+      'docker',
+      'git',
+    ],
 
-export async function scoreResumeAgainstJobDescription(
-  input: ScoreResumeAgainstJobDescriptionInput
-): Promise<ScoreResumeAgainstJobDescriptionOutput> {
-  return scoreResumeAgainstJobDescriptionFlow(input);
+    // 🎨 Design / Creative
+    design: [
+      'ui',
+      'ux',
+      'figma',
+      'adobe',
+      'photoshop',
+      'illustrator',
+      'indesign',
+      'wireframe',
+      'prototyping',
+      'visual design',
+      'branding',
+      'typography',
+      'color theory',
+    ],
+
+    // 📊 Data / Analytics
+    data: [
+      'data analysis',
+      'data analytics',
+      'power bi',
+      'tableau',
+      'excel',
+      'google sheets',
+      'statistics',
+      'machine learning',
+      'sql',
+      'python',
+    ],
+
+    // 📢 Marketing / Business
+    marketing: [
+      'digital marketing',
+      'seo',
+      'sem',
+      'content marketing',
+      'email marketing',
+      'social media',
+      'google ads',
+      'facebook ads',
+      'market research',
+      'branding',
+    ],
+
+    // 🏢 Operations / Management
+    management: [
+      'project management',
+      'agile',
+      'scrum',
+      'kanban',
+      'stakeholder management',
+      'planning',
+      'roadmap',
+      'coordination',
+      'operations',
+    ],
+
+    // 🧠 Soft Skills (VERY IMPORTANT FOR ATS)
+    soft: [
+      'communication',
+      'teamwork',
+      'collaboration',
+      'problem solving',
+      'critical thinking',
+      'time management',
+      'leadership',
+      'adaptability',
+      'creativity',
+    ],
+
+    // 🧰 Tools & Platforms
+    tools: [
+      'jira',
+      'notion',
+      'slack',
+      'trello',
+      'asana',
+      'ms excel',
+      'powerpoint',
+      'word',
+      'google workspace',
+    ],
+  };
+
+  /* =========================
+     MATCHING LOGIC
+  ========================= */
+  function normalize(text: string) {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9+.#]/g, ' ')
+    .replace(/\s+/g, ' ');
 }
 
-const prompt = ai.definePrompt({
-  name: 'scoreResumeAgainstJobDescriptionPrompt',
-  input: {schema: ScoreResumeAgainstJobDescriptionInputSchema},
-  output: {schema: ScoreResumeAgainstJobDescriptionOutputSchema},
-  prompt: `You are a resume screening expert.
 
-You will compare a resume against a job description and provide a match score between 0 and 100.
+  const found: Set<string> = new Set();
+  const missing: Set<string> = new Set();
 
-You will also identify missing skills from the resume that are present in the job description.
+  Object.values(skillGroups).forEach((skills) => {
+    skills.forEach((skill) => {
+      if (job.includes(skill)) {
+        if (resume.includes(skill)) {
+          found.add(skill);
+        } else {
+          missing.add(skill);
+        }
+      }
+    });
+  });
 
-Finally, you will identify strengths from the resume that align with the job description.
+  const foundArr = Array.from(found);
+  const missingArr = Array.from(missing);
 
-Resume:
-{{resumeText}}
+  const total = foundArr.length + missingArr.length;
+  const score =
+    total === 0 ? 0 : Math.round((foundArr.length / total) * 100);
 
-Job Description:
-{{jobDescription}}`,
-});
-
-const scoreResumeAgainstJobDescriptionFlow = ai.defineFlow(
-  {
-    name: 'scoreResumeAgainstJobDescriptionFlow',
-    inputSchema: ScoreResumeAgainstJobDescriptionInputSchema,
-    outputSchema: ScoreResumeAgainstJobDescriptionOutputSchema,
-  },
-  async input => {
-    const {output} = await prompt(input);
-    return output!;
-  }
-);
+  return {
+    matchScore: score,
+    strengths:
+      foundArr.length > 0
+        ? foundArr.join(', ')
+        : 'No strong matches found',
+    missingSkills:
+      missingArr.length > 0
+        ? missingArr.join(', ')
+        : 'No major gaps',
+  };
+}

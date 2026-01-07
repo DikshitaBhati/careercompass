@@ -1,148 +1,140 @@
 'use client';
 
-import type { JobWithMatch } from '@/lib/types';
+import { useState } from 'react';
+import { ExternalLink, Briefcase, MapPin } from 'lucide-react';
+import { scoreResumeForSingleJob } from '@/app/actions';
+import { useToast } from '@/hooks/use-toast';
+import ResumeUploadDialog from './resume-upload-dialog';
+
 import { Button } from './ui/button';
+import { Badge } from './ui/badge';
 import {
   Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
   CardHeader,
+  CardContent,
+  CardFooter,
   CardTitle,
+  CardDescription,
 } from './ui/card';
-import { Briefcase, ExternalLink, MapPin } from 'lucide-react';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from './ui/tooltip';
-
-/**
- * 🔹 Helper to detect job platform from URL
- */
+import type { Job } from '@/lib/types';
 function getPlatformName(url: string) {
-  if (!url) return 'Company Website';
-  if (url.includes('linkedin')) return 'LinkedIn';
-  if (url.includes('indeed')) return 'Indeed';
-  if (url.includes('glassdoor')) return 'Glassdoor';
-  if (url.includes('naukri')) return 'Naukri';
-  return 'Company Website';
+  try {
+    const host = new URL(url).hostname;
+    if (host.includes('indeed')) return 'Indeed';
+    if (host.includes('linkedin')) return 'LinkedIn';
+    if (host.includes('glassdoor')) return 'Glassdoor';
+    return host.replace('www.', '');
+  } catch {
+    return 'Job portal';
+  }
 }
 
-type JobCardProps = {
-  job: JobWithMatch;
-};
 
-export default function JobCard({ job }: JobCardProps) {
-  const score = job.match?.matchScore;
+export default function JobCard({ job }: { job: Job }) {
+  const { toast } = useToast();
+
+  const [loading, setLoading] = useState(false);
+  const [match, setMatch] = useState<any>(null);
+  const [showUpload, setShowUpload] = useState(false);
+  const [hasResume, setHasResume] = useState(false);
+
+  const handleCheckMatch = async () => {
+    if (!hasResume) {
+      setShowUpload(true);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const sessionId = localStorage.getItem('careercompass_session')!;
+      const result = await scoreResumeForSingleJob(job.id, sessionId);
+      setMatch(result);
+    } catch (e: any) {
+      toast({
+        title: 'Unable to analyze',
+        description: 'Please upload your resume first.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <Card className="flex flex-col h-full overflow-hidden transition-all hover:shadow-lg">
-      {/* 🔹 HEADER */}
-      <CardHeader>
-        <div className="flex justify-between items-start gap-4">
-          <CardTitle className="text-lg font-bold leading-tight">
-            {job.title}
-          </CardTitle>
+    <>
+      <Card className="flex flex-col h-full">
+        <CardHeader>
+          <CardTitle>{job.title}</CardTitle>
+          <CardDescription>
+            <div className="flex gap-2 text-sm">
+              <Briefcase className="h-4 w-4" /> {job.company}
+            </div>
+            <div className="flex gap-2 text-sm">
+              <MapPin className="h-4 w-4" /> {job.location}
+            </div>
+          </CardDescription>
+        </CardHeader>
 
-          {score !== undefined && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center gap-2 flex-shrink-0 cursor-default">
-                    <span className="font-semibold text-lg">{score}</span>
-                    <div className="w-8 h-8 relative">
-                      <svg className="w-full h-full" viewBox="0 0 36 36">
-                        <path
-                          className="text-gray-200"
-                          d="M18 2.0845
-                             a 15.9155 15.9155 0 0 1 0 31.831
-                             a 15.9155 15.9155 0 0 1 0 -31.831"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="3"
-                        />
-                        <path
-                          className={
-                            score > 75
-                              ? 'text-green-500'
-                              : score > 50
-                              ? 'text-yellow-500'
-                              : 'text-primary'
-                          }
-                          d="M18 2.0845
-                             a 15.9155 15.9155 0 0 1 0 31.831
-                             a 15.9155 15.9155 0 0 1 0 -31.831"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="3"
-                          strokeDasharray={`${score}, 100`}
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                    </div>
-                  </div>
-                </TooltipTrigger>
+        <CardContent className="space-y-2">
+          <p className="text-sm text-muted-foreground line-clamp-3">
+            {job.description}
+          </p>
 
-                <TooltipContent>
-                  <p className="font-semibold">Match Score: {score}/100</p>
-                  {job.match?.strengths && (
-                    <p className="text-sm mt-1">
-                      <strong>Strengths:</strong> {job.match.strengths}
-                    </p>
-                  )}
-                  {job.match?.missingSkills && (
-                    <p className="text-sm mt-1">
-                      <strong>Missing:</strong> {job.match.missingSkills}
-                    </p>
-                  )}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+          {match && (
+            <>
+              <Badge variant="secondary">
+                Match: {match.matchScore}%
+              </Badge>
+              <p className="text-sm">
+                <b>Strengths:</b> {match.strengths}
+              </p>
+              <p className="text-sm">
+                <b>Missing skills:</b> {match.missingSkills}
+              </p>
+            </>
           )}
-        </div>
+        </CardContent>
 
-        <CardDescription className="space-y-1 pt-1">
-          <div className="flex items-center gap-2 text-sm">
-            <Briefcase className="h-4 w-4 text-muted-foreground" />
-            <span>{job.company}</span>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <MapPin className="h-4 w-4 text-muted-foreground" />
-            <span>{job.location}</span>
-          </div>
-        </CardDescription>
-      </CardHeader>
-
-      {/* 🔹 DESCRIPTION */}
-      <CardContent className="flex-grow">
-        <p className="text-sm text-muted-foreground line-clamp-3">
-          {job.description}
-        </p>
-      </CardContent>
-
-      {/* 🔹 FOOTER */}
-      <CardFooter className="flex flex-col gap-2">
-        <span className="text-xs text-muted-foreground">
-          Apply via <strong>{getPlatformName(job.applyUrl)}</strong>
-        </span>
-
-        <Button
-          asChild
-          className="w-full"
-          aria-label={`Apply for ${job.title}`}
-        >
-          <a
-            href={job.applyUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+        <CardFooter className="flex flex-col gap-2">
+          {/* Secondary CTA */}
+          <Button
+            variant="outline"
+            onClick={handleCheckMatch}
+            disabled={loading}
           >
-            Apply Now
-            <ExternalLink className="ml-2 h-4 w-4" />
-          </a>
-        </Button>
-      </CardFooter>
-    </Card>
+            {loading ? 'Analyzing...' : 'View resume match'}
+          </Button>
+          
+          {/* Primary CTA */}
+         <Button asChild className="w-full">
+    <a
+      href={job.applyUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      Apply
+    </a>
+  </Button>
+
+  {/* Platform label */}
+  <a
+    href={job.applyUrl}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="flex items-center justify-center gap-1 text-xs text-muted-foreground hover:underline"
+  >
+    {getPlatformName(job.applyUrl)}
+    <ExternalLink className="h-3 w-3" />
+  </a>
+
+        </CardFooter>
+      </Card>
+
+      <ResumeUploadDialog
+        open={showUpload}
+        onClose={() => setShowUpload(false)}
+        onUploadSuccess={() => setHasResume(true)}
+      />
+    </>
   );
 }
