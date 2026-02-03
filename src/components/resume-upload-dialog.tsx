@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { saveResumeText } from '@/app/actions';
+import { useActionState, useEffect, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { saveResumeText } from '@/app/actions';
 
 import {
   Dialog,
@@ -14,6 +14,7 @@ import {
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import { useFormStatus } from 'react-dom';
 
 type Props = {
   open: boolean;
@@ -21,64 +22,48 @@ type Props = {
   onUploadSuccess: () => void;
 };
 
+const initialState = { message: '', error: false };
+
+function SubmitButton({ disabled }: { disabled: boolean }) {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" className="w-full" disabled={pending || disabled}>
+      {pending ? 'Uploading...' : 'Upload Resume'}
+    </Button>
+  );
+}
+
 export default function ResumeUploadDialog({
   open,
   onClose,
   onUploadSuccess,
 }: Props) {
   const { toast } = useToast();
+  const [state, formAction] = useActionState(saveResumeText, initialState);
   const [file, setFile] = useState<File | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [sessionId, setSessionId] = useState('');
 
-  const handleUpload = async () => {
-    if (!file) {
-      toast({
-        title: 'No file selected',
-        description: 'Please choose a resume file.',
-      });
-      return;
+  useEffect(() => {
+    if (open) {
+      setSessionId(localStorage.getItem('careercompass_session') ?? '');
     }
+  }, [open]);
 
-    const sessionId = localStorage.getItem('careercompass_session');
-    if (!sessionId) {
-      toast({
-        title: 'Session error',
-        description: 'Please refresh the page and try again.',
-        variant: 'destructive',
-      });
-      return;
-    }
+  useEffect(() => {
+    if (!state.message) return;
 
-    try {
-      setLoading(true);
+    toast({
+      title: state.error ? 'Upload failed' : 'Resume uploaded',
+      description: state.message,
+      variant: state.error ? 'destructive' : 'default',
+    });
 
-      const formData = new FormData();
-      formData.append('resume', file);
-      formData.append('sessionId', sessionId);
-
-      const res = await saveResumeText(null, formData);
-
-      if (res.error) {
-        throw new Error(res.message);
-      }
-
-      toast({
-        title: 'Resume uploaded',
-        description: 'You can now check resume match.',
-      });
-
+    if (!state.error) {
       onUploadSuccess();
       onClose();
-    } catch (err: any) {
-      toast({
-        title: 'Upload failed',
-        description: err.message || 'Could not upload resume.',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
+      setFile(null);
     }
-  };
+  }, [state, toast, onUploadSuccess, onClose]);
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -86,31 +71,28 @@ export default function ResumeUploadDialog({
         <DialogHeader>
           <DialogTitle>Upload your resume</DialogTitle>
           <DialogDescription>
-            Upload your resume to see how well it matches this job.
+            Add your resume once to check job matches.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <form action={formAction} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="resume">Resume (PDF)</Label>
             <Input
               id="resume"
               type="file"
               accept=".pdf"
+              name="resume"
               onChange={(e) =>
                 setFile(e.target.files?.[0] || null)
               }
             />
           </div>
 
-          <Button
-            className="w-full"
-            onClick={handleUpload}
-            disabled={loading}
-          >
-            {loading ? 'Uploading…' : 'Upload Resume'}
-          </Button>
-        </div>
+          <input type="hidden" name="sessionId" value={sessionId} />
+
+          <SubmitButton disabled={!file || !sessionId} />
+        </form>
       </DialogContent>
     </Dialog>
   );

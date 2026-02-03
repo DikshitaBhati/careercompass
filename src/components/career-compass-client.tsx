@@ -5,29 +5,16 @@ import type { Job } from '@/lib/types';
 
 import JobSearchForm from './job-search-form';
 import JobList from './job-list';
-
 import { Button } from './ui/button';
-import { Skeleton } from './ui/skeleton';
 
-type CareerCompassClientProps = {
-  initialJobs: Job[];
-};
-
-export default function CareerCompassClient({
-  initialJobs,
-}: CareerCompassClientProps) {
+export default function CareerCompassClient() {
   const [view, setView] = useState<'search' | 'results'>('search');
-  const [hasSearched, setHasSearched] = useState(false);
-  const [hasUploadedResume, setHasUploadedResume] = useState(false);
   const [jobs, setJobs] = useState<Job[]>([]);
-  const [isClient, setIsClient] = useState(false);
+  const [hasUploadedResume, setHasUploadedResume] = useState(false);
 
-  // Client-only render
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
-
-  // Session ID (no login)
+  /* ------------------------------
+     Session (no login)
+  ------------------------------ */
   useEffect(() => {
     let sessionId = localStorage.getItem('careercompass_session');
     if (!sessionId) {
@@ -35,21 +22,6 @@ export default function CareerCompassClient({
       localStorage.setItem('careercompass_session', sessionId);
     }
   }, []);
-
-  // Load jobs after search
-  useEffect(() => {
-    if (hasSearched) {
-      setJobs(initialJobs);
-    }
-  }, [initialJobs, hasSearched]);
-
-  if (!isClient) {
-    return (
-      <div className="container mx-auto p-4 lg:p-8">
-        <Skeleton className="h-96 rounded-lg" />
-      </div>
-    );
-  }
 
   return (
     <div className="container mx-auto p-4 lg:p-8">
@@ -61,8 +33,6 @@ export default function CareerCompassClient({
               variant="outline"
               onClick={() => {
                 setView('search');
-                setHasSearched(false);
-                setHasUploadedResume(false);
                 setJobs([]);
               }}
             >
@@ -71,18 +41,16 @@ export default function CareerCompassClient({
           )}
 
           <JobSearchForm
-            onSearchComplete={() => {
-              setHasSearched(true);
+            onSearchComplete={(fetchedJobs: Job[]) => {
+              setJobs(fetchedJobs);
               setView('results');
             }}
           />
-
-          
         </aside>
 
-        {/* Main */}
+        {/* Main content */}
         <section className="lg:col-span-8 xl:col-span-9">
-          {!hasSearched ? (
+          {view === 'search' ? (
             <div className="flex h-full items-center justify-center text-muted-foreground">
               <p className="text-lg">
                 Start by searching for a job to see matching opportunities.
@@ -92,6 +60,7 @@ export default function CareerCompassClient({
             <JobList
               jobs={jobs}
               hasUploadedResume={hasUploadedResume}
+              onResumeUploaded={() => setHasUploadedResume(true)}
             />
           )}
         </section>

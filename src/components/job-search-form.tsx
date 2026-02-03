@@ -1,140 +1,135 @@
 'use client';
 
-import { useActionState, useEffect, useState } from 'react';
-import { useFormStatus } from 'react-dom';
+import { useState } from 'react';
+import { getStoredJobs, searchAndStoreJobs } from '@/app/actions';
+import type { Job } from '@/lib/types';
 
-import { Search } from 'lucide-react';
-import { searchAndStoreJobs } from '@/app/actions';
-import { Button } from './ui/button';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-} from './ui/card';
-import { Input } from './ui/input';
-import { Label } from './ui/label';
-import { useToast } from '@/hooks/use-toast';
+} from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
-/**
- * ✅ Server Action initial state
- */
-const initialState = {
-  message: '',
-  error: false,
+type Props = {
+  onSearchComplete: (jobs: Job[]) => void;
 };
 
-type JobSearchFormProps = {
-  onSearchComplete?: () => void;
-};
+export default function JobSearchForm({ onSearchComplete }: Props) {
+  const [query, setQuery] = useState('');
+  const [location, setLocation] = useState('');
+  const [jobType, setJobType] = useState('All');
+  const [workMode, setWorkMode] = useState('All');
+  const [loading, setLoading] = useState(false);
 
-function SubmitButton() {
-  const { pending } = useFormStatus();
-  return (
-    <Button type="submit" disabled={pending} className="w-full">
-      {pending ? 'Searching...' : 'Search Jobs'}
-      {!pending && <Search className="ml-2 h-4 w-4" />}
-    </Button>
-  );
-}
+  async function handleSearch() {
+    if (!query.trim()) return;
 
-export default function JobSearchForm({
-  onSearchComplete,
-}: JobSearchFormProps) {
-  const { toast } = useToast();
+    setLoading(true);
 
-  const [state, formAction] = useActionState(
-    searchAndStoreJobs,
-    initialState
-  );
+    const formData = new FormData();
+    formData.append('query', query);
 
-  // 🔹 Handle search result feedback
-  const [hasShownToast, setHasShownToast] = useState(false);
+    // These are UI-only for now (fine for project)
+    formData.append('location', location);
+    formData.append('jobType', jobType);
+    formData.append('workMode', workMode);
 
-useEffect(() => {
-  if (state.message && !hasShownToast) {
-    toast({
-      title: state.error ? 'Search Failed' : 'Search Complete',
-      description: state.message,
-      variant: state.error ? 'destructive' : 'default',
-    });
+    await searchAndStoreJobs(null, formData);
+    const storedJobs = await getStoredJobs();
 
-    setHasShownToast(true);
-
-    if (!state.error) {
-      onSearchComplete?.();
-    }
+    setLoading(false);
+    onSearchComplete(storedJobs);
   }
 
-  if (!state.message) {
-    setHasShownToast(false);
-  }
-}, [state, toast, onSearchComplete, hasShownToast]);
-
-
   return (
-    <Card>
+    <Card className="w-full">
       <CardHeader>
-        <CardTitle>Find Your Next Role</CardTitle>
+        <CardTitle className="text-xl">
+          Find Your Next Role
+        </CardTitle>
       </CardHeader>
 
-      <CardContent>
-        <form action={formAction} className="space-y-4">
-          {/* Job title */}
-          <div className="space-y-2">
-            <Label htmlFor="query">Job Title / Keyword</Label>
-            <Input
-              id="query"
-              name="query"
-              placeholder="e.g., Software Engineer"
-              required
-            />
+      <CardContent className="space-y-4">
+        {/* Job Title */}
+        <div>
+          <label className="text-sm font-medium">
+            Job Title / Keyword
+          </label>
+          <Input
+            placeholder="e.g. Software Engineer"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+
+        {/* Location */}
+        <div>
+          <label className="text-sm font-medium">
+            Location
+          </label>
+          <Input
+            placeholder="e.g. India"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+          />
+        </div>
+
+        {/* Filters */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-sm font-medium">
+              Job Type
+            </label>
+            <Select value={jobType} onValueChange={setJobType}>
+              <SelectTrigger>
+                <SelectValue placeholder="All" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All</SelectItem>
+                <SelectItem value="Full Time">Full Time</SelectItem>
+                <SelectItem value="Part Time">Part Time</SelectItem>
+                <SelectItem value="Contract">Contract</SelectItem>
+                <SelectItem value="Internship">Internship</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          {/* Location */}
-          <div className="space-y-2">
-            <Label htmlFor="location">Location</Label>
-            <Input
-              id="location"
-              name="location"
-              placeholder="e.g., India"
-              required
-            />
+          <div>
+            <label className="text-sm font-medium">
+              Work Mode
+            </label>
+            <Select value={workMode} onValueChange={setWorkMode}>
+              <SelectTrigger>
+                <SelectValue placeholder="All" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All</SelectItem>
+                <SelectItem value="Remote">Remote</SelectItem>
+                <SelectItem value="Hybrid">Hybrid</SelectItem>
+                <SelectItem value="Onsite">Onsite</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
+        </div>
 
-          {/* Filters (UI-only, future-ready) */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="jobType">Job Type</Label>
-              <select
-                id="jobType"
-                name="jobType"
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="">All</option>
-                <option value="full-time">Full-time</option>
-                <option value="internship">Internship</option>
-                <option value="contract">Contract</option>
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="workMode">Work Mode</Label>
-              <select
-                id="workMode"
-                name="workMode"
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="">All</option>
-                <option value="remote">Remote</option>
-                <option value="hybrid">Hybrid</option>
-                <option value="onsite">On-site</option>
-              </select>
-            </div>
-          </div>
-
-          <SubmitButton />
-        </form>
+        {/* Search Button */}
+        <Button
+          className="w-full mt-2"
+          onClick={handleSearch}
+          disabled={loading}
+        >
+          {loading ? 'Searching…' : 'Search Jobs'}
+        </Button>
       </CardContent>
     </Card>
   );
